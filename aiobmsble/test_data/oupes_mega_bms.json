@@ -1,0 +1,14 @@
+[
+  {
+    "advertisement": {
+      "local_name": "OUPES-Mega1",
+      "service_uuids": ["00001910-0000-1000-8000-00805f9b34fb"],
+      "platform_data": ["A0:B1:C2:D3:E4:F5"]
+    },
+    "type": "oupes_mega_bms",
+    "_comments": [
+      "OUPES Mega 1 power station",
+      "matched via proprietary service UUID 0x1910"
+    ]
+  }
+]
