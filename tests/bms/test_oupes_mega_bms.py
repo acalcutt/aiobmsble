@@ -66,6 +66,8 @@ _PKT_FAULT = _make_pkt((105, 1))
 _PKT_MODULE_SOC = _make_compact_pkt(79, 75)
 # attr 101=1 (slot index), attr 80=856 (85.6 °F = 29.8 °C) — ext battery slot
 _PKT_SLOT = _make_pkt((101, 1), (80, 856))
+# attr 53=104 (B2 input 104W), attr 54=50 (B2 output 50W) — per-slot power
+_PKT_SLOT_POWER = _make_pkt((53, 104), (54, 50))
 
 # Discharging scenario: no input power, AC output present
 _PKT_DISCHARGING = _make_pkt((3, 60), (21, 0))
@@ -135,6 +137,7 @@ class MockOUPESExtBattery(MockOUPESBleakClient):
         _PKT_MAIN,
         _PKT_SLOT,       # sets slot 1, attr 80
         _PKT_MODULE_SOC, # attr 79 for slot 1
+        _PKT_SLOT_POWER, # attr 53=104 (B2 input), attr 54=50 (B2 output) for slot 1
     ]
 
 
@@ -266,6 +269,19 @@ def test_notification_handler_ignores_empty() -> None:
     bms._notification_handler("char", _PKT_HANDSHAKE_80)
     assert bms._data == {}
     assert not bms._msg_event.is_set()
+
+
+def test_notification_handler_ext_battery_53_54() -> None:
+    """Attrs 53 and 54 are routed to ext_batteries (not main data) after slot context."""
+    bms = BMS(generate_ble_device())
+    bms._notification_handler("char", _PKT_SLOT)       # attr 101=1 establishes slot 1
+    bms._notification_handler("char", _PKT_SLOT_POWER) # attr 53=104, attr 54=50
+
+    # Must be in ext_batteries[slot], NOT in main data
+    assert 53 not in bms._data
+    assert 54 not in bms._data
+    assert bms._ext_batteries[1][53] == 104
+    assert bms._ext_batteries[1][54] == 50
 
 
 # ── _build_sample unit tests ──────────────────────────────────────────────────

@@ -17,6 +17,20 @@ differs from the standard BMS profile:
     pack_battery_levels             — per-module attr 79
     pack_count                      — number of modules reporting
 
+  Per-module attrs (stored in _ext_batteries[slot]; NOT in BMSSample):
+    attr 53  — B2 Input Power (W): power entering the B2 via its secondary
+               MPPT/DC port (solar panel or external DC source).
+               B2 solar input is ALSO counted in attr 21's system total —
+               it does NOT flow through attr 22 (grid) or attr 23 (main solar).
+    attr 54  — B2 Output Power (W): total power leaving the B2 (chain-cable
+               discharge toward the main unit plus B2 USB ports combined).
+    attr 78  — multiplexed: raw value ≤ 6000 = runtime remaining (minutes);
+               raw value ≥ 44000 = battery pack voltage (mV).  On current
+               Mega 1 firmware only slot 2 broadcasts voltage readings;
+               slot 1 never does.
+    attr 79  — per-module SoC (direct %, 0–100)  → pack_battery_levels
+    attr 80  — per-module temperature (°F × 10)  → temp_values
+
   NOT available from this device:
     voltage, current — the protocol only exposes watt readings, not V/A.
 
@@ -57,8 +71,10 @@ def _crc8_smbus(data: bytes) -> int:
 
 # ── Attribute sets ─────────────────────────────────────────────────────────────
 
-# Attrs that belong to a per-slot battery module (slot index carried in attr 101)
-_EXT_BATTERY_ATTRS: Final[frozenset[int]] = frozenset({78, 79, 80})
+# Attrs that belong to a per-slot battery module (slot index carried in attr 101).
+# 53 = B2 Input Power, 54 = B2 Output Power, 78 = runtime/voltage (muxed),
+# 79 = SoC (%), 80 = temperature (°F×10).
+_EXT_BATTERY_ATTRS: Final[frozenset[int]] = frozenset({53, 54, 78, 79, 80})
 
 
 # ── Packet parser ──────────────────────────────────────────────────────────────
@@ -340,7 +356,11 @@ class BMS(BaseBMS):
             # BaseBMS._add_missing_values() will derive `temperature` as fmean(temp_values)
 
         # Power — net watts: positive = charging, negative = discharging.
-        # attr 21 = total input; attrs 4/6/7/8 = AC / DC-12V / USB-C / USB-A output
+        # attr 21 = total system input (grid + main-unit solar + B2 secondary-port
+        # solar — note B2 solar bypasses attr 23 and flows directly into attr 21).
+        # attrs 4/6/7/8 = AC / DC-12V / USB-C / USB-A output.
+        # Per-slot B2 input/output power (attrs 53/54) are stored in
+        # _ext_batteries[slot] for callers that need them but are not in BMSSample.
         input_w: int = data.get(21, 0)
         output_w: int = sum(data.get(a, 0) for a in (4, 6, 7, 8))
         if 21 in data or any(a in data for a in (4, 6, 7, 8)):
